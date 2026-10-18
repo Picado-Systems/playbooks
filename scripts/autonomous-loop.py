@@ -93,7 +93,7 @@ def get_next_kanban_task():
     
     # Inspeciona tabelas e campos existentes
     try:
-        cursor.execute("SELECT id, title, description, priority, project FROM tasks WHERE status = 'todo' ORDER BY priority DESC, id ASC LIMIT 1")
+        cursor.execute("SELECT id, title, body, priority, project_id FROM tasks WHERE status = 'todo' ORDER BY priority ASC, id ASC LIMIT 1")
         row = cursor.fetchone()
         conn.close()
         if row:
