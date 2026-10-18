@@ -42,11 +42,28 @@ logging.basicConfig(
 
 KANBAN_DB = Path.home() / ".hermes/kanban.db"
 HERMES_ENV = Path.home() / ".hermes/.env"
+ATHOS_TOKEN_FILE = Path.home() / ".github/athos-agent-token"
 
-def run_hermes_chat(profile, prompt, timeout=900):
+def get_agent_gh_token():
+    """Obtém o token do athoagent-oss a partir de ~/.github/athos-agent-token ou ~/.hermes/.env."""
+    if ATHOS_TOKEN_FILE.exists():
+        token = ATHOS_TOKEN_FILE.read_text().strip()
+        if token:
+            return token
+    if HERMES_ENV.exists():
+        with open(HERMES_ENV) as f:
+            for line in f:
+                if line.startswith("AGENT_GH_TOKEN="):
+                    return line.strip().split("=", 1)[1].strip('"\'')
+    return os.environ.get("AGENT_GH_TOKEN")
+
+def run_hermes_chat(profile, prompt, timeout=900, custom_env=None):
     """Executa o hermes chat de forma robusta passando argumentos em lista (sem problemas de escaping shell)."""
     cmd = ["hermes", "chat", "-p", profile, "-q", prompt]
     logging.info(f"Despachando specialist '{profile}' com prompt de {len(prompt)} caracteres...")
+    env = {**os.environ}
+    if custom_env:
+        env.update(custom_env)
     try:
         result = subprocess.run(
             cmd,
@@ -54,7 +71,7 @@ def run_hermes_chat(profile, prompt, timeout=900):
             text=True,
             capture_output=True,
             timeout=timeout,
-            env=os.environ
+            env=env
         )
         return result.stdout.strip()
     except subprocess.CalledProcessError as e:
@@ -153,8 +170,67 @@ def get_project_dir(project):
             return str(c)
     return f"/home/ricardovarzim/dev/RicardoVarzim/{project}"
 
+def check_pr_ci(project_dir, pr_number, timeout=420):
+    """
+    Aguarda e valida os checks de CI no GitHub para o PR indicado.
+    Retorna (True, None) se todos os checks passarem (pass/success).
+    Retorna (False, failure_summary) se algum check falhar ou expirar o tempo.
+    """
+    logging.info(f"Gatekeeper CI: Monitorizando checks do PR #{pr_number} (timeout={timeout}s)...")
+    start = time.time()
+    
+    agent_token = get_agent_gh_token()
+    env = {**os.environ}
+    if agent_token:
+        env["GH_TOKEN"] = agent_token
+        env["GITHUB_TOKEN"] = agent_token
+
+    while time.time() - start < timeout:
+        time.sleep(15)
+        cmd = ["gh", "pr", "checks", str(pr_number), "--json", "name,state,bucket,event"]
+        res = subprocess.run(cmd, cwd=project_dir, env=env, capture_output=True, text=True)
+        
+        if res.returncode != 0:
+            logging.warning(f"gh pr checks retornou erro: {res.stderr.strip()}")
+            continue
+            
+        try:
+            checks = json.loads(res.stdout.strip())
+        except Exception:
+            continue
+            
+        if not checks:
+            # Nenhum check registado ainda
+            continue
+            
+        all_passed = True
+        has_pending = False
+        failed_checks = []
+        
+        for c in checks:
+            bucket = c.get("bucket", "").lower()
+            state = c.get("state", "").lower()
+            name = c.get("name", "unknown")
+            
+            if bucket in ("fail", "error") or state in ("failure", "timed_out", "action_required"):
+                all_passed = False
+                failed_checks.append(name)
+            elif bucket in ("pending", "in_progress") or state in ("pending", "in_progress", "queued"):
+                has_pending = True
+                
+        if failed_checks:
+            err_msg = f"CI Falhou nos checks: {', '.join(failed_checks)}"
+            logging.error(f"PR #{pr_number} - {err_msg}")
+            return False, err_msg
+            
+        if not has_pending and all_passed:
+            logging.info(f"CI Gatekeeper: Todos os {len(checks)} checks passaram com sucesso no PR #{pr_number}!")
+            return True, "CI 100% Verde (todos os checks passaram com sucesso)"
+            
+    return False, f"Timeout ({timeout}s) a aguardar conclusão dos checks de CI."
+
 def execute_task(task):
-    """Executa o ciclo Dev -> Reviewer para uma tarefa específica."""
+    """Executa o ciclo Dev -> Gatekeeper CI -> Reviewer Interno para uma tarefa."""
     task_id = task["id"]
     task_title = task["title"]
     task_desc = task["description"]
@@ -164,42 +240,85 @@ def execute_task(task):
     logging.info(f"--- Iniciando Tarefa: [{task_id}] {task_title} ({project}) ---")
     update_task_status(task_id, "in_progress")
 
-    # 1. Despacho do dev com salvaguardas explícitas de deploy
+    # 1. Despacho do dev com salvaguardas explícitas de deploy, identidade e template
+    agent_token = get_agent_gh_token()
+    dev_env = {}
+    if agent_token:
+        dev_env["GH_TOKEN"] = agent_token
+        dev_env["GITHUB_TOKEN"] = agent_token
+        dev_env["AGENT_GH_TOKEN"] = agent_token
+
     dev_prompt = (
-        f"Tu és o specialist 'dev' do Athos. Trabalha na identidade 'athoagent-oss'.\n"
+        f"Tu és o specialist 'dev' do Athos. Trabalha na identidade estrita 'athoagent-oss'.\n"
         f"Tarefa: [{task_id}] {task_title}\n"
         f"Contexto/ACs:\n{task_desc}\n\n"
         f"REGRA INEGOCIÁVEL DO FUNDADOR:\n"
         f"- Proibido fazer deploy em produção ou merge na branch main.\n"
         f"- Toda a implementação deve ser feita numa branch isolada feat/{task_id}.\n"
         f"- Executa os testes locais para validar e abre o Pull Request para revisão do RicardoVarzim.\n\n"
-        f"Instruções:\n"
+        f"REQUISITOS ESTRITOS DE PR:\n"
         f"1. Acede ao repositório local em '{project_dir}'.\n"
         f"2. Garante checkout da branch main atualizada e cria a branch feat/{task_id}.\n"
-        f"3. Implementa a solução com testes unitários.\n"
-        f"4. Abre o PR no GitHub como 'athoagent-oss'.\n"
+        f"3. Implementa a solução e valida com testes unitários locais.\n"
+        f"4. Abre o PR no GitHub como 'athoagent-oss' com descrição COMPLETA e ESTRUTURADA:\n"
+        f"   O corpo do PR (--body) DEVE conter obrigatoriamente:\n"
+        f"   ## 🎯 Objetivo\n"
+        f"   <Descrição clara e concisa do que foi implementado e requisitos atendidos>\n\n"
+        f"   ## 🛠️ Alterações Realizadas\n"
+        f"   - <Lista dos ficheiros novos ou modificados e o seu papel>\n\n"
+        f"   ## 🧪 Evidência de Testes Locais\n"
+        f"   - <Comando executado e resumo detalhado dos testes aprovados>\n\n"
+        f"   ## 🛡️ Salvaguardas & Governança\n"
+        f"   - Implementado em branch isolada feat/{task_id}\n"
+        f"   - Nenhuma alteração direta na branch main nem ambiente de produção\n\n"
+        f"   OBRIGATÓRIO: Executa com identidade do agente: GH_TOKEN=\"$AGENT_GH_TOKEN\" gh pr create ...\n"
         f"5. Retorna o URL do PR e o resumo de testes."
     )
 
     try:
-        dev_output = run_hermes_chat("dev", dev_prompt, timeout=1200)
+        dev_output = run_hermes_chat("dev", dev_prompt, timeout=1200, custom_env=dev_env)
     except Exception as e:
         error_msg = f"⚠️ *Athos Bloqueio:* Falha no specialist dev para a tarefa `{task_id}`: {e}"
         send_telegram_alert(error_msg)
         update_task_status(task_id, "blocked")
         return {"status": "blocked", "error": str(e), "task": task}
 
+    # Extrair PR URL ou número
+    import re
+    pr_match = re.search(r"pull/(\d+)", dev_output)
+    pr_number = pr_match.group(1) if pr_match else None
+
+    if not pr_number:
+        pr_list_cmd = ["gh", "pr", "list", "--head", f"feat/{task_id}", "--json", "number", "--jq", ".[0].number"]
+        pr_list_res = subprocess.run(pr_list_cmd, cwd=project_dir, env=dev_env, capture_output=True, text=True)
+        if pr_list_res.stdout.strip():
+            pr_number = pr_list_res.stdout.strip()
+
+    # 2. Gatekeeper de CI: O PR SÓ pode avançar se o CI estiver verde!
+    ci_passed, ci_info = True, "Sem PR detetado para validação de CI"
+    if pr_number:
+        logging.info(f"PR detetado: #{pr_number}. Iniciando verificação de CI...")
+        ci_passed, ci_info = check_pr_ci(project_dir, pr_number, timeout=420)
+        if not ci_passed:
+            error_msg = f"❌ *Athos Gatekeeper:* CI falhou para PR #{pr_number} na tarefa `{task_id}`: {ci_info}"
+            send_telegram_alert(error_msg)
+            update_task_status(task_id, "blocked")
+            return {"status": "blocked", "error": f"CI Falhou: {ci_info}", "task": task, "dev_output": dev_output}
+
     update_task_status(task_id, "in_review")
 
-    # 2. Despacho do reviewer
+    # 3. Despacho do reviewer (100% INTERNO — SEM COMENTÁRIOS NO GITHUB)
     rev_prompt = (
-        f"Tu és o specialist 'reviewer' do Athos. Avalia a entrega do dev para [{task_id}] {task_title}.\n"
-        f"Evidência do Dev:\n{dev_output}\n\n"
-        f"REGRA DO FUNDADOR: Não tentes fazer merge nem deploy. Apenas audita diffs e CI.\n"
+        f"Tu és o specialist 'reviewer' do Athos. Faz a auditoria interna da entrega do dev para [{task_id}] {task_title}.\n"
+        f"Evidência do Dev:\n{dev_output}\n"
+        f"Relatório de CI: {ci_info}\n\n"
+        f"REGRA INEGOCIÁVEL DO FUNDADOR:\n"
+        f"- A auditoria é ESTREITAMENTE INTERNA. NUNCA comentes no PR do GitHub.\n"
+        f"- Proibido fazer merge na main ou deploy em produção.\n"
         f"Instruções:\n"
-        f"1. Inspeciona o PR aberto.\n"
-        f"2. Valida CI e segurança do código.\n"
-        f"3. Comenta no PR com o parecer técnico e recomenda ao RicardoVarzim."
+        f"1. Inspeciona o código e diffs do PR.\n"
+        f"2. Valida segurança, qualidade e conformidade com os Critérios de Aceitação.\n"
+        f"3. Retorna a tua avaliação técnica estruturada interna (com veredito APROVADO / REJEITADO) para registo no Kanban e envio ao Ricardo no Telegram."
     )
 
     try:
