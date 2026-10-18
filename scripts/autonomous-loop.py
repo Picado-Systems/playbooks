@@ -25,6 +25,9 @@ import logging
 from datetime import datetime, timedelta
 from pathlib import Path
 
+# Garantir PATH para binários do Hermes
+os.environ["PATH"] = f"{Path.home()}/.local/bin:" + os.environ.get("PATH", "")
+
 # Configuração de Logs
 LOG_FILE = Path.home() / ".hermes/logs/autonomous-loop.log"
 LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
@@ -40,24 +43,26 @@ logging.basicConfig(
 KANBAN_DB = Path.home() / ".hermes/kanban.db"
 HERMES_ENV = Path.home() / ".hermes/.env"
 
-def run_command(cmd, timeout=300):
-    """Executa um comando shell de forma segura com timeout."""
+def run_hermes_chat(profile, prompt, timeout=900):
+    """Executa o hermes chat de forma robusta passando argumentos em lista (sem problemas de escaping shell)."""
+    cmd = ["hermes", "chat", "-p", profile, "-q", prompt]
+    logging.info(f"Despachando specialist '{profile}' com prompt de {len(prompt)} caracteres...")
     try:
-        logging.info(f"Executando: {cmd}")
         result = subprocess.run(
             cmd,
-            shell=True,
             check=True,
             text=True,
             capture_output=True,
-            timeout=timeout
+            timeout=timeout,
+            env=os.environ
         )
         return result.stdout.strip()
     except subprocess.CalledProcessError as e:
-        logging.error(f"Erro no comando '{cmd}': {e.stderr.strip()}")
+        err_out = (e.stderr or "") + "\n" + (e.stdout or "")
+        logging.error(f"Erro no specialist '{profile}': {err_out.strip()}")
         raise
     except subprocess.TimeoutExpired:
-        logging.error(f"Timeout atingido para o comando: {cmd}")
+        logging.error(f"Timeout atingido no specialist '{profile}'")
         raise
 
 def send_telegram_alert(message):
@@ -81,7 +86,8 @@ def send_telegram_alert(message):
             urllib.request.urlopen(req, timeout=10)
             logging.info("Notificação Telegram enviada com sucesso.")
         else:
-            run_command(f'hermes chat -q "Envia mensagem ao Ricardo no Telegram: {message}"', timeout=60)
+            cmd = ["hermes", "chat", "-q", f"Envia mensagem ao Ricardo no Telegram: {message}"]
+            subprocess.run(cmd, capture_output=True, text=True, timeout=60, env=os.environ)
     except Exception as e:
         logging.warning(f"Não foi possível enviar mensagem Telegram: {e}")
 
@@ -98,14 +104,14 @@ def get_next_kanban_task(project_filter=None):
         if project_filter:
             cursor.execute(
                 "SELECT id, title, body, priority, project_id FROM tasks "
-                "WHERE status = 'todo' AND (project_id = ? OR title LIKE ?) "
+                "WHERE status IN ('ready', 'todo') AND (project_id = ? OR title LIKE ?) "
                 "ORDER BY priority ASC, id ASC LIMIT 1",
                 (project_filter, f"%{project_filter}%")
             )
         else:
             cursor.execute(
                 "SELECT id, title, body, priority, project_id FROM tasks "
-                "WHERE status = 'todo' ORDER BY priority ASC, id ASC LIMIT 1"
+                "WHERE status IN ('ready', 'todo') ORDER BY priority ASC, id ASC LIMIT 1"
             )
         row = cursor.fetchone()
         conn.close()
@@ -135,12 +141,25 @@ def update_task_status(task_id, new_status):
     except Exception as e:
         logging.error(f"Erro ao atualizar status direto na BD: {e}")
 
+def get_project_dir(project):
+    """Localiza o diretório absoluto do repositório no dev workspace da VPS."""
+    candidates = [
+        Path(f"/home/ricardovarzim/dev/RicardoVarzim/{project}"),
+        Path(f"/home/ricardovarzim/dev/Picado-Systems/{project}"),
+        Path(f"/home/ricardovarzim/dev/{project}"),
+    ]
+    for c in candidates:
+        if c.exists() and (c / ".git").exists():
+            return str(c)
+    return f"/home/ricardovarzim/dev/RicardoVarzim/{project}"
+
 def execute_task(task):
     """Executa o ciclo Dev -> Reviewer para uma tarefa específica."""
     task_id = task["id"]
     task_title = task["title"]
     task_desc = task["description"]
     project = task["project"]
+    project_dir = get_project_dir(project)
 
     logging.info(f"--- Iniciando Tarefa: [{task_id}] {task_title} ({project}) ---")
     update_task_status(task_id, "in_progress")
@@ -150,21 +169,20 @@ def execute_task(task):
         f"Tu és o specialist 'dev' do Athos. Trabalha na identidade 'athoagent-oss'.\n"
         f"Tarefa: [{task_id}] {task_title}\n"
         f"Contexto/ACs:\n{task_desc}\n\n"
-        f"🚨 REGRA INEGOCIÁVEL DO FUNDADOR:\n"
+        f"REGRA INEGOCIÁVEL DO FUNDADOR:\n"
         f"- Proibido fazer deploy em produção ou merge na branch main.\n"
         f"- Toda a implementação deve ser feita numa branch isolada feat/{task_id}.\n"
         f"- Executa os testes locais para validar e abre o Pull Request para revisão do RicardoVarzim.\n\n"
         f"Instruções:\n"
-        f"1. Acede ao repositório '{project}'.\n"
-        f"2. Cria a branch feat/{task_id}.\n"
+        f"1. Acede ao repositório local em '{project_dir}'.\n"
+        f"2. Garante checkout da branch main atualizada e cria a branch feat/{task_id}.\n"
         f"3. Implementa a solução com testes unitários.\n"
         f"4. Abre o PR no GitHub como 'athoagent-oss'.\n"
         f"5. Retorna o URL do PR e o resumo de testes."
     )
 
     try:
-        logging.info("Despachando specialist 'dev'...")
-        dev_output = run_command(f'hermes chat -p dev -q "{dev_prompt}"', timeout=900)
+        dev_output = run_hermes_chat("dev", dev_prompt, timeout=1200)
     except Exception as e:
         error_msg = f"⚠️ *Athos Bloqueio:* Falha no specialist dev para a tarefa `{task_id}`: {e}"
         send_telegram_alert(error_msg)
@@ -177,7 +195,7 @@ def execute_task(task):
     rev_prompt = (
         f"Tu és o specialist 'reviewer' do Athos. Avalia a entrega do dev para [{task_id}] {task_title}.\n"
         f"Evidência do Dev:\n{dev_output}\n\n"
-        f"🚨 REGRA DO FUNDADOR: Não tentes fazer merge nem deploy. Apenas audita diffs e CI.\n"
+        f"REGRA DO FUNDADOR: Não tentes fazer merge nem deploy. Apenas audita diffs e CI.\n"
         f"Instruções:\n"
         f"1. Inspeciona o PR aberto.\n"
         f"2. Valida CI e segurança do código.\n"
@@ -185,8 +203,7 @@ def execute_task(task):
     )
 
     try:
-        logging.info("Despachando specialist 'reviewer'...")
-        rev_output = run_command(f'hermes chat -p reviewer -q "{rev_prompt}"', timeout=600)
+        rev_output = run_hermes_chat("reviewer", rev_prompt, timeout=600)
     except Exception as e:
         logging.error(f"Erro na fase de review: {e}")
         rev_output = "Review concluído com avisos."
@@ -228,7 +245,6 @@ def main():
             executed_tasks.append(result)
         else:
             blocked_tasks.append(result)
-            # Em caso de bloqueio crítico, interrompe a onda para avaliação do fundador
             logging.warning("Bloqueio encontrado. Interrompendo a onda para decisão do fundador.")
             break
 
