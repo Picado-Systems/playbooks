@@ -187,35 +187,29 @@ def check_pr_ci(project_dir, pr_number, timeout=420):
 
     while time.time() - start < timeout:
         time.sleep(15)
-        cmd = ["gh", "pr", "checks", str(pr_number), "--json", "name,state,bucket,event"]
+        cmd = ["gh", "pr", "checks", str(pr_number)]
         res = subprocess.run(cmd, cwd=project_dir, env=env, capture_output=True, text=True)
         
-        if res.returncode != 0:
-            logging.warning(f"gh pr checks retornou erro: {res.stderr.strip()}")
+        output = (res.stdout or "").strip()
+        if not output:
             continue
             
-        try:
-            checks = json.loads(res.stdout.strip())
-        except Exception:
-            continue
-            
-        if not checks:
-            # Nenhum check registado ainda
+        lines = [line.strip().split("\t") for line in output.splitlines() if line.strip()]
+        if not lines:
             continue
             
         all_passed = True
         has_pending = False
         failed_checks = []
         
-        for c in checks:
-            bucket = c.get("bucket", "").lower()
-            state = c.get("state", "").lower()
-            name = c.get("name", "unknown")
+        for parts in lines:
+            name = parts[0]
+            status = parts[1].lower() if len(parts) > 1 else ""
             
-            if bucket in ("fail", "error") or state in ("failure", "timed_out", "action_required"):
+            if status in ("fail", "error", "failure", "timed_out"):
                 all_passed = False
                 failed_checks.append(name)
-            elif bucket in ("pending", "in_progress") or state in ("pending", "in_progress", "queued"):
+            elif status in ("pending", "in_progress", "queued"):
                 has_pending = True
                 
         if failed_checks:
@@ -224,13 +218,28 @@ def check_pr_ci(project_dir, pr_number, timeout=420):
             return False, err_msg
             
         if not has_pending and all_passed:
-            logging.info(f"CI Gatekeeper: Todos os {len(checks)} checks passaram com sucesso no PR #{pr_number}!")
+            logging.info(f"CI Gatekeeper: Todos os {len(lines)} checks passaram com sucesso no PR #{pr_number}!")
             return True, "CI 100% Verde (todos os checks passaram com sucesso)"
             
     return False, f"Timeout ({timeout}s) a aguardar conclusão dos checks de CI."
 
+def get_ci_failed_logs(project_dir, branch_name, env):
+    """Obtém os logs dos passos que falharam no CI do GitHub Actions."""
+    try:
+        cmd = ["gh", "run", "list", "-b", branch_name, "--limit", "1", "--json", "databaseId", "--jq", ".[0].databaseId"]
+        res = subprocess.run(cmd, cwd=project_dir, env=env, capture_output=True, text=True)
+        run_id = (res.stdout or "").strip()
+        if run_id:
+            log_cmd = ["gh", "run", "view", run_id, "--log-failed"]
+            log_res = subprocess.run(log_cmd, cwd=project_dir, env=env, capture_output=True, text=True)
+            output = (log_res.stdout or "").strip()
+            return output[-4000:] if output else ""
+    except Exception as e:
+        logging.warning(f"Erro ao extrair logs de falha do CI: {e}")
+    return ""
+
 def execute_task(task):
-    """Executa o ciclo Dev -> Gatekeeper CI -> Reviewer Interno para uma tarefa."""
+    """Executa o ciclo Dev -> Gatekeeper CI (com Self-Healing) -> Reviewer Interno para uma tarefa."""
     task_id = task["id"]
     task_title = task["title"]
     task_desc = task["description"]
@@ -294,16 +303,54 @@ def execute_task(task):
         if pr_list_res.stdout.strip():
             pr_number = pr_list_res.stdout.strip()
 
-    # 2. Gatekeeper de CI: O PR SÓ pode avançar se o CI estiver verde!
+    # 2. Gatekeeper de CI com Ciclo de Auto-Remediação (Self-Healing)
     ci_passed, ci_info = True, "Sem PR detetado para validação de CI"
+    max_ci_retries = 3
+
     if pr_number:
-        logging.info(f"PR detetado: #{pr_number}. Iniciando verificação de CI...")
-        ci_passed, ci_info = check_pr_ci(project_dir, pr_number, timeout=420)
+        branch_name = f"feat/{task_id}"
+        try:
+            head_cmd = ["gh", "pr", "view", str(pr_number), "--json", "headRefName", "--jq", ".headRefName"]
+            head_res = subprocess.run(head_cmd, cwd=project_dir, env=dev_env, capture_output=True, text=True)
+            if head_res.stdout.strip():
+                branch_name = head_res.stdout.strip()
+        except Exception:
+            pass
+
+        for attempt in range(1, max_ci_retries + 1):
+            logging.info(f"PR detetado: #{pr_number} (branch: {branch_name}). Verificação de CI (Tentativa {attempt}/{max_ci_retries})...")
+            ci_passed, ci_info = check_pr_ci(project_dir, pr_number, timeout=420)
+            if ci_passed:
+                break
+            
+            if attempt < max_ci_retries:
+                logging.warning(f"CI falhou na tentativa {attempt}. Disparando ciclo de Auto-Remediação...")
+                failed_logs = get_ci_failed_logs(project_dir, branch_name, dev_env)
+                remediation_prompt = (
+                    f"Tu és o specialist 'dev' do Athos em modo AUTO-REMEDIAÇÃO.\n"
+                    f"O teu Pull Request #{pr_number} na branch '{branch_name}' falhou a validação de CI no GitHub Actions.\n\n"
+                    f"Erro detectado pelo Gatekeeper: {ci_info}\n"
+                    f"Logs detalhados de falha do CI:\n{failed_logs}\n\n"
+                    f"INSTRUÇÕES OBRIGATÓRIAS DE REMEDIAÇÃO (Tentativa {attempt + 1}/{max_ci_retries}):\n"
+                    f"1. Acede a '{project_dir}' na branch '{branch_name}'.\n"
+                    f"2. Corrige os erros de compilação, namespaces em falta ou testes com falhas.\n"
+                    f"3. Executa a suite de testes local (ex: dotnet test / npm test) e garante 100% de aprovação.\n"
+                    f"4. Faz commit da correção e push para a MESMA branch '{branch_name}'.\n"
+                    f"NUNCA abras um novo PR! Apenas faz commit e push na branch existente."
+                )
+                try:
+                    dev_output = run_hermes_chat("dev", remediation_prompt, timeout=900, custom_env=dev_env)
+                    logging.info("Auto-remediação executada. Aguardando trigger e execução do novo CI...")
+                    time.sleep(15)
+                except Exception as e:
+                    logging.error(f"Erro durante auto-remediação: {e}")
+                    break
+
         if not ci_passed:
-            error_msg = f"❌ *Athos Gatekeeper:* CI falhou para PR #{pr_number} na tarefa `{task_id}`: {ci_info}"
+            error_msg = f"❌ *Athos Gatekeeper:* CI falhou após {max_ci_retries} tentativas para PR #{pr_number} na tarefa `{task_id}`: {ci_info}"
             send_telegram_alert(error_msg)
             update_task_status(task_id, "blocked")
-            return {"status": "blocked", "error": f"CI Falhou: {ci_info}", "task": task, "dev_output": dev_output}
+            return {"status": "blocked", "error": f"CI Falhou após {max_ci_retries} tentativas: {ci_info}", "task": task, "dev_output": dev_output}
 
     update_task_status(task_id, "in_review")
 
@@ -364,8 +411,8 @@ def main():
             executed_tasks.append(result)
         else:
             blocked_tasks.append(result)
-            logging.warning("Bloqueio encontrado. Interrompendo a onda para decisão do fundador.")
-            break
+            logging.warning(f"Tarefa {task['id']} bloqueada após tentativas. Registando bloqueio e prosseguindo com a onda...")
+            continue
 
     # Relatório Executivo Consolidado da Onda
     duration_str = str(datetime.now() - start_time).split(".")[0]
