@@ -6,11 +6,14 @@ Registo de evolução técnica, arquitetura implementada e backlog do **`cripto-
 
 ## 1. Contexto e Objetivos
 
-O **`cripto-bot-2`** é um bot de negociação e análise técnica em **.NET 9**, desenhado com Clean Architecture:
-- `AuraTrader.Domain`: Entidades (`TradeSignal`, `IndicatorResult`), enums (`SignalAction`) e interfaces de indicadores técnicos.
-- `AuraTrader.Application`: Serviços de análise técnica (`PriceAnalysisService`), momentum (`MomentumSignalEvaluator`), paper trading e DTOs.
-- `AuraTrader.Infrastructure`: Mensageria em memória (`ChannelMessageBus`), clientes de APIs de exchanges.
-- `AuraTrader.UnitTests`: Suite de testes unitários com `xUnit`, `FluentAssertions` e `Moq`.
+O **`cripto-bot-2`** é um bot de negociação e análise técnica em **.NET 9**, desenhado com Clean Architecture e estratégia Lean MVP (100% local, custo 0€ de infraestrutura):
+- `AuraTrader.Domain`: Entidades (`TradeSignal`, `IndicatorResult`, `PaperAccount`, `PaperPosition`, `PaperOrder`), enums (`SignalAction`) e indicadores técnicos matemáticos puros (SMA, EMA, RSI, MACD).
+- `AuraTrader.Application`: Serviços de análise técnica (`PriceAnalysisService`), momentum (`MomentumSignalEvaluator`), interfaces (`IExchangeDataProvider`, `IMessageBus`, `IPaperTradingService`) e DTOs.
+- `AuraTrader.Infrastructure`: Mensageria assíncrona in-process (`ChannelMessageBus`), base de dados local SQLite (`AuraTraderDbContext`), cache em memória (`MemoryMarketDataCache`) e simulação de ordens (`PaperTradingService`).
+- `AuraTrader.Worker`: Serviço em background com temporizador periódico (`PeriodicTimer`) para ingestão e execução autónoma.
+- `AuraTrader.Api`: API REST documentada com Swagger e Serilog.
+- `ui/`: Frontend reativo em **Angular 19** com Angular Signals e Angular Material.
+- `AuraTrader.UnitTests`: Suite de testes unitários com `xUnit`, `FluentAssertions` e SQLite in-memory.
 
 ---
 
@@ -21,19 +24,42 @@ O **`cripto-bot-2`** é um bot de negociação e análise técnica em **.NET 9**
 | **`t_aura_01`** | [PR #2](https://github.com/RicardoVarzim/cripto-bot-2/pull/2) | `.github/workflows/ci.yml` | 11/11 Passados | **Merged** |
 | **`t_aura_02`** | [PR #3](https://github.com/RicardoVarzim/cripto-bot-2/pull/3) | `src/AuraTrader.Domain/Indicators/MACD.cs`<br>`tests/.../MACDTests.cs` | 16/16 Passados | **Merged** |
 | **`t_aura_03`** | [PR #4](https://github.com/RicardoVarzim/cripto-bot-2/pull/4) | `src/.../Services/MomentumSignalEvaluator.cs`<br>`tests/.../MomentumSignalEvaluatorTests.cs` | 20/20 Passados | **Merged** |
+| **`t_aura_04/05`** | [PR #5](https://github.com/RicardoVarzim/cripto-bot-2/pull/5) | `MarketDataIngestionService`, `PricePollingWorker`, `PaperTradingService`, `PaperTradingWorker`, `ui/` (Angular 19) | 28/28 Passados | **Merged** |
 
-### Resumo Técnico do Lean MVP Integrado:
-1. **Pipeline de CI (.NET 9)**: Setup automatizado, restore, build e testes unitários em release.
-2. **Indicador Técnico MACD**: Cálculo de Linha MACD (EMA 12 - EMA 26), Linha de Sinal (EMA 9) e Histograma com lógica de tendência Bullish / Bearish.
-3. **Detector de Sinais de Momentum**: Combinação de condições de sobrecompra/sobrevenda (RSI <= 30 / >= 70) com cruzamento de MACD, gerando e publicando `TradeSignal` de forma assíncrona no `ChannelMessageBus`.
+### Resumo Técnico do Lean MVP Integrado até ao PR #5:
+1. **Pipeline de Ingestão e Worker Autónomo**: Polling periódico de cotações, persistência em SQLite e emissão no `ChannelMessageBus`.
+2. **Motor de Paper Trading**: Carteira virtual de $10.000 USD, alocação de 10% por trade, dedução de taxa de 0.1%, acompanhamento de PnL realizado/não-realizado e persistência completa de ordens (`PaperOrders`).
+3. **Frontend Angular 19**: Painel reativo com Angular Signals, exibindo métricas de carteira, posições em aberto e comandos de trigger manual.
 
 ---
 
-## 3. Backlog Imediato (Preparado no Kanban para `wave_01`)
+## 3. Backlog Ativo da Sprint: Dry-Run & Backtesting de Estratégias
 
-1. **`t_aura_04`**: `PaperTradingService: Simulação de Execução de Ordens e PnL`
-   - Consumo dos eventos `TradeSignal` emitidos pelo `ChannelMessageBus`.
-   - Carteira simulada com saldo inicial (10.000 USDT).
-   - Cálculo de PnL realizado e não realizado.
-2. **`t_aura_05`**: `TradeLedger e Registo de Execuções Simuladas`
-   - Auditoria e histórico de ordens com slippage e comissões simuladas.
+> **Atenção Provedor de Mercado:** A API da CryptoCompare passou a requerer API Key obrigatória (HTTP 401). A API pública da Binance (`api.binance.com`) é gratuita e não requer autenticação. A tarefa `t_aura_06` desbloqueia o fluxo 100% gratuito.
+
+### Tarefas Prioritárias para o Athos Agent:
+
+1. **`t_aura_06`**: `BinancePublicDataProvider: Mercado Spot e Velas Históricas sem Chaves`
+   - **Objetivo**: Implementar cliente `BinancePublicClient` consumindo `https://api.binance.com/api/v3/ticker/price` e `/api/v3/klines`.
+   - **ACs**: Mapeamento para `CoinHistoricalPrice`, suporte a pares `BTCUSDT`, `ETHUSDT`, `SOLUSDT` e testes unitários com mock HTTP.
+   - **Regra**: Proibido merge na `main` e sem deploy. Abrir PR como `athoagent-oss`.
+
+2. **`t_aura_07`**: `ITradingStrategy & Estratégias Concorrentes (EMA Cross, RSI Mean Reversion, MACD Momentum)`
+   - **Objetivo**: Abstrair a lógica de sinais para permitir que diferentes algoritmos concorram entre si.
+   - **ACs**: Interface `ITradingStrategy` em `AuraTrader.Domain/Strategies/`, implementações `EmaCrossStrategy` (9/21), `RsiMeanReversionStrategy` (30/70) e `MacdMomentumStrategy` com testes xUnit dedicados.
+   - **Regra**: Proibido merge na `main` e sem deploy. Abrir PR como `athoagent-oss`.
+
+3. **`t_aura_08`**: `IBacktestService: Motor de Simulação Histórica Rápida e Métricas Financeiras`
+   - **Objetivo**: Motor de backtesting sequencial vela-a-vela que avalia uma estratégia contra 100 a 500 velas em milissegundos.
+   - **ACs**: Cálculo de Win Rate %, Profit Factor, Max Drawdown %, Curva de Capital (Equity Curve) e endpoint `POST /api/Backtest/run`.
+   - **Regra**: Proibido merge na `main` e sem deploy. Abrir PR como `athoagent-oss`.
+
+4. **`t_aura_09`**: `UI Angular de Backtesting & Comparador Visual de Estratégias`
+   - **Objetivo**: Tela na aplicação Angular (`ui/`) para selecionar estratégia, correr simulação e exibir gráficos e tabela de rentabilidade.
+   - **ACs**: Consumo dos endpoints de backtesting, gráfico de Equity Curve (Chart.js) e tabela comparativa de estratégias.
+   - **Regra**: Proibido merge na `main` e sem deploy. Abrir PR como `athoagent-oss`.
+
+5. **`t_aura_10`**: `Multi-Strategy Dry-Run no Worker & Auditoria Final`
+   - **Objetivo**: Permitir ao `AuraTrader.Worker` correr múltiplas estratégias em modo dry-run ao vivo em simultâneo com sub-carteiras virtuais.
+   - **ACs**: Tagging de ordens por estratégia, relatórios de rentabilidade segregados e auditoria com >85% de cobertura de testes.
+   - **Regra**: Proibido merge na `main` e sem deploy. Abrir PR como `athoagent-oss`.
