@@ -27,16 +27,29 @@ O **`cripto-bot-2`** é um bot de negociação e análise técnica em **.NET 9**
 | **`t_aura_04/05`** | [PR #5](https://github.com/RicardoVarzim/cripto-bot-2/pull/5) | `MarketDataIngestionService`, `PricePollingWorker`, `PaperTradingService`, `PaperTradingWorker`, `ui/` (Angular 19) | 28/28 Passados | **Merged** |
 | **`t_aura_06`** | [PR #8](https://github.com/RicardoVarzim/cripto-bot-2/pull/8) | `BinancePublicClient.cs`, `DependencyInjection.cs`, `BinancePublicClientTests.cs` | 35/35 Passados | **Merged** |
 | **`t_aura_07`** | [PR #9](https://github.com/RicardoVarzim/cripto-bot-2/pull/9) | `ITradingStrategy.cs`, `EmaCrossStrategy.cs`, `RsiMeanReversionStrategy.cs`, `MacdMomentumStrategy.cs`, `IBacktestService.cs`, `BacktestService.cs`, `BacktestController.cs` | 42/42 Passados | **Merged** |
+| **`t_aura_08`** | [PR #10](https://github.com/RicardoVarzim/cripto-bot-2/pull/10) | `BotConfiguration.cs`, `IBotConfigurationService.cs`, `BotConfigurationService.cs`, `AdminController.cs`, `PricePollingWorker.cs`, `MarketDataIngestionService.cs` | 51/51 Passados | **Merged** |
+| **`t_aura_09`** | [PR #11](https://github.com/RicardoVarzim/cripto-bot-2/pull/11) | `AdminService.ts`, `AdminPanelComponent` (HTML/SCSS/TS), `app.routes.ts`, `sidebar.component.ts` | 51/51 Tests & Angular Build OK | **Merged** |
 
-### Resumo Técnico do Lean MVP Integrado até ao PR #9:
-1. **Estratégias Plurais & Motor de Backtesting Rápido**:
+### Resumo Técnico do Lean MVP Integrado até ao PR #11:
+1. **Painel de Administração e Gestão de Risco Angular 19 (`t_aura_09`)**:
+   - Desenvolvido `AdminPanelComponent` e `AdminService` reativo em Angular Signals.
+   - Barra de controlo operacional com Play/Pause dinâmico, ingestão manual forçada e Kill Switch de emergência.
+   - Gestão de pares dinâmicos por chips interativos (`BTC/USD`, `ETH/USD`, `SOL/USD`, etc.).
+   - Parametrização em tempo real com sliders para intervalo de polling, sensibilidade de confiança, histórico e gestão de risco (alocação %, stop-loss %, take-profit % e taxas).
+   - Visualizador interativo de Backtesting com gráficos de Curva de Património (Equity Curve via Chart.js), cartões de KPI (Win Rate, Profit Factor, Max Drawdown) e tabela de ordens simuladas.
+2. **Motor de Parametrização Dinâmica & Controlo Operacional (`t_aura_08`)**:
+   - Entidade `BotConfiguration` persistida em SQLite via EF Core.
+   - Serviço `IBotConfigurationService` / `BotConfigurationService` com hot-reloading de parâmetros.
+   - `PricePollingWorker` e `MarketDataIngestionService` adaptados para pausa/retoma dinâmica e intervalos flexíveis.
+   - Endpoints REST em `AdminController`: `/api/admin/status`, `/api/admin/config`, `/api/admin/worker/pause`, `/api/admin/worker/resume`, `/api/admin/worker/poll`.
+3. **Estratégias Plurais & Motor de Backtesting Rápido (`t_aura_07`)**:
    - `ITradingStrategy`: Abstração de estratégias no Domínio com 3 algoritmos concorrentes (`EmaCrossStrategy(9/21)`, `RsiMeanReversionStrategy(14, 30/70)` e `MacdMomentumStrategy(12/26/9)`).
    - `IBacktestService`: Simulação sequencial cronológica vela-a-vela com modelo realista de custos (taxa 0.1% e slippage 0.05%), calculando Win Rate %, Total P&L ($ e %), Profit Factor, Max Drawdown % e Equity Curve temporal.
    - Endpoints REST `GET /api/Backtest/strategies` e `POST /api/Backtest/run`.
-2. **Provedor de Mercado Gratuito (Binance)**: Implementado `BinancePublicClient` consumindo endpoints públicos spot e klines (1d) da Binance sem necessidade de API key, com normalização de pares (`USD` -> `USDT`). Provedor padrão configurado no DI.
-3. **Pipeline de Ingestão e Worker Autónomo**: Polling periódico de cotações, persistência em SQLite e emissão no `ChannelMessageBus`.
-4. **Motor de Paper Trading**: Carteira virtual de $10.000 USD, alocação de 10% por trade, dedução de taxa de 0.1%, acompanhamento de PnL realizado/não-realizado e persistência completa de ordens (`PaperOrders`).
-5. **Frontend Angular 19**: Painel reativo com Angular Signals, exibindo métricas de carteira, posições em aberto e comandos de trigger manual.
+4. **Provedor de Mercado Gratuito Binance (`t_aura_06`)**:
+   - `BinancePublicClient` consumindo endpoints públicos spot e klines sem necessidade de API key, com normalização de pares (`USD` -> `USDT`).
+5. **Pipeline de Ingestão e Simulação de Carteira**:
+   - Polling periódico, persistência em SQLite, emissão no `ChannelMessageBus` e acompanhamento de carteira paper trading.
 
 ---
 
