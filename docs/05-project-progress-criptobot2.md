@@ -26,12 +26,17 @@ O **`cripto-bot-2`** é um bot de negociação e análise técnica em **.NET 9**
 | **`t_aura_03`** | [PR #4](https://github.com/RicardoVarzim/cripto-bot-2/pull/4) | `src/.../Services/MomentumSignalEvaluator.cs`<br>`tests/.../MomentumSignalEvaluatorTests.cs` | 20/20 Passados | **Merged** |
 | **`t_aura_04/05`** | [PR #5](https://github.com/RicardoVarzim/cripto-bot-2/pull/5) | `MarketDataIngestionService`, `PricePollingWorker`, `PaperTradingService`, `PaperTradingWorker`, `ui/` (Angular 19) | 28/28 Passados | **Merged** |
 | **`t_aura_06`** | [PR #8](https://github.com/RicardoVarzim/cripto-bot-2/pull/8) | `BinancePublicClient.cs`, `DependencyInjection.cs`, `BinancePublicClientTests.cs` | 35/35 Passados | **Merged** |
+| **`t_aura_07`** | [PR #9](https://github.com/RicardoVarzim/cripto-bot-2/pull/9) | `ITradingStrategy.cs`, `EmaCrossStrategy.cs`, `RsiMeanReversionStrategy.cs`, `MacdMomentumStrategy.cs`, `IBacktestService.cs`, `BacktestService.cs`, `BacktestController.cs` | 42/42 Passados | **Merged** |
 
-### Resumo Técnico do Lean MVP Integrado até ao PR #8:
-1. **Provedor de Mercado Gratuito (Binance)**: Implementado `BinancePublicClient` consumindo endpoints públicos spot e klines (1d) da Binance sem necessidade de API key, com normalização de pares (`USD` -> `USDT`). Provedor padrão configurado no DI.
-2. **Pipeline de Ingestão e Worker Autónomo**: Polling periódico de cotações, persistência em SQLite e emissão no `ChannelMessageBus`.
-3. **Motor de Paper Trading**: Carteira virtual de $10.000 USD, alocação de 10% por trade, dedução de taxa de 0.1%, acompanhamento de PnL realizado/não-realizado e persistência completa de ordens (`PaperOrders`).
-4. **Frontend Angular 19**: Painel reativo com Angular Signals, exibindo métricas de carteira, posições em aberto e comandos de trigger manual.
+### Resumo Técnico do Lean MVP Integrado até ao PR #9:
+1. **Estratégias Plurais & Motor de Backtesting Rápido**:
+   - `ITradingStrategy`: Abstração de estratégias no Domínio com 3 algoritmos concorrentes (`EmaCrossStrategy(9/21)`, `RsiMeanReversionStrategy(14, 30/70)` e `MacdMomentumStrategy(12/26/9)`).
+   - `IBacktestService`: Simulação sequencial cronológica vela-a-vela com modelo realista de custos (taxa 0.1% e slippage 0.05%), calculando Win Rate %, Total P&L ($ e %), Profit Factor, Max Drawdown % e Equity Curve temporal.
+   - Endpoints REST `GET /api/Backtest/strategies` e `POST /api/Backtest/run`.
+2. **Provedor de Mercado Gratuito (Binance)**: Implementado `BinancePublicClient` consumindo endpoints públicos spot e klines (1d) da Binance sem necessidade de API key, com normalização de pares (`USD` -> `USDT`). Provedor padrão configurado no DI.
+3. **Pipeline de Ingestão e Worker Autónomo**: Polling periódico de cotações, persistência em SQLite e emissão no `ChannelMessageBus`.
+4. **Motor de Paper Trading**: Carteira virtual de $10.000 USD, alocação de 10% por trade, dedução de taxa de 0.1%, acompanhamento de PnL realizado/não-realizado e persistência completa de ordens (`PaperOrders`).
+5. **Frontend Angular 19**: Painel reativo com Angular Signals, exibindo métricas de carteira, posições em aberto e comandos de trigger manual.
 
 ---
 
