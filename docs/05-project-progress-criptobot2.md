@@ -29,9 +29,15 @@ O **`cripto-bot-2`** é um bot de negociação e análise técnica em **.NET 9**
 | **`t_aura_07`** | [PR #9](https://github.com/RicardoVarzim/cripto-bot-2/pull/9) | `ITradingStrategy.cs`, `EmaCrossStrategy.cs`, `RsiMeanReversionStrategy.cs`, `MacdMomentumStrategy.cs`, `IBacktestService.cs`, `BacktestService.cs`, `BacktestController.cs` | 42/42 Passados | **Merged** |
 | **`t_aura_08`** | [PR #10](https://github.com/RicardoVarzim/cripto-bot-2/pull/10) | `BotConfiguration.cs`, `IBotConfigurationService.cs`, `BotConfigurationService.cs`, `AdminController.cs`, `PricePollingWorker.cs`, `MarketDataIngestionService.cs` | 51/51 Passados | **Merged** |
 | **`t_aura_09`** | [PR #11](https://github.com/RicardoVarzim/cripto-bot-2/pull/11) | `AdminService.ts`, `AdminPanelComponent` (HTML/SCSS/TS), `app.routes.ts`, `sidebar.component.ts` | 51/51 Tests & Angular Build OK | **Merged** |
+| **`ui-refactor`** | [PR #12](https://github.com/RicardoVarzim/cripto-bot-2/pull/12) | Limpeza DevExpress & Workflows, Trading Cockpit Dashboard completo, Dark Theme e otimização de bundle | 51/51 Tests & Build 3.1s | **Merged** |
 
-### Resumo Técnico do Lean MVP Integrado até ao PR #11:
-1. **Painel de Administração e Gestão de Risco Angular 19 (`t_aura_09`)**:
+### Resumo Técnico do Lean MVP Integrado até ao PR #12:
+1. **Remoção de Legado & Modernização UI Angular 19 (PR #12)**:
+   - Remoção completa de dependências proprietárias DevExpress (`devextreme`, `devextreme-angular`, diagramas).
+   - Eliminação de módulos descontinuados (`workflow` e `entity-listing`).
+   - Construção do **Trading Cockpit Dashboard** (`/dashboard`): Hero KPIs de portfólio, ticker spot Binance ao vivo, tabela de posições abertas com cálculo de PnL latente, stream de sinais algorítmicos e log de ordens executadas.
+   - Aceleração do build Angular de **18.3s para 3.1s** (5.8x mais rápido) e redução de estilos de **646 kB para 6.9 kB**.
+2. **Painel de Administração e Gestão de Risco Angular 19 (`t_aura_09`)**:
    - Desenvolvido `AdminPanelComponent` e `AdminService` reativo em Angular Signals.
    - Barra de controlo operacional com Play/Pause dinâmico, ingestão manual forçada e Kill Switch de emergência.
    - Gestão de pares dinâmicos por chips interativos (`BTC/USD`, `ETH/USD`, `SOL/USD`, etc.).
