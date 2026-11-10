@@ -30,9 +30,16 @@ O **`cripto-bot-2`** é um bot de negociação e análise técnica em **.NET 9**
 | **`t_aura_08`** | [PR #10](https://github.com/RicardoVarzim/cripto-bot-2/pull/10) | `BotConfiguration.cs`, `IBotConfigurationService.cs`, `BotConfigurationService.cs`, `AdminController.cs`, `PricePollingWorker.cs`, `MarketDataIngestionService.cs` | 51/51 Passados | **Merged** |
 | **`t_aura_09`** | [PR #11](https://github.com/RicardoVarzim/cripto-bot-2/pull/11) | `AdminService.ts`, `AdminPanelComponent` (HTML/SCSS/TS), `app.routes.ts`, `sidebar.component.ts` | 51/51 Tests & Angular Build OK | **Merged** |
 | **`ui-refactor`** | [PR #12](https://github.com/RicardoVarzim/cripto-bot-2/pull/12) | Limpeza DevExpress & Workflows, Trading Cockpit Dashboard completo, Dark Theme e otimização de bundle | 51/51 Tests & Build 3.1s | **Merged** |
+| **`t_aura_10`** | [PR #13](https://github.com/RicardoVarzim/cripto-bot-2/pull/13) | `BacktestService.cs` (comparador em lote), `BacktestController.cs`, `AdminPanelComponent` (benchmark e curvas multi-linha), `DashboardComponent` (ledger com filtros dinâmicos) | 53/53 Passados & Build 4.0s | **Merged** |
 
-### Resumo Técnico do Lean MVP Integrado até ao PR #12:
-1. **Remoção de Legado & Modernização UI Angular 19 (PR #12)**:
+### Resumo Técnico do Lean MVP Integrado até ao PR #13:
+1. **Benchmark Multi-Estratégia & Ledger Avançado (`t_aura_10`)**:
+   - Endpoint `POST /api/backtest/compare` executando simulações em batch das 3 estratégias concorrentes (`EMA-CROSS`, `RSI-REVERSION`, `MACD-MOMENTUM`) contra velas reais da Binance com uma única requisição.
+   - Algoritmo de recomendação da melhor estratégia baseado em maior rentabilidade e Profit Factor.
+   - Gráfico multi-linha em Chart.js sobrepondo as curvas de património (*Equity Curves*) de cada estratégia.
+   - Tabela de ranking com medalhas/badges, métricas de retorno, taxa de acerto e drawdown máximo.
+   - Ledger avançado de ordens de Paper Trading no Cockpit com filtros instantâneos por Par, Lado (`BUY` / `SELL`), pesquisa textual e somatório de volume/taxas.
+2. **Remoção de Legado & Modernização UI Angular 19 (PR #12)**:
    - Remoção completa de dependências proprietárias DevExpress (`devextreme`, `devextreme-angular`, diagramas).
    - Eliminação de módulos descontinuados (`workflow` e `entity-listing`).
    - Construção do **Trading Cockpit Dashboard** (`/dashboard`): Hero KPIs de portfólio, ticker spot Binance ao vivo, tabela de posições abertas com cálculo de PnL latente, stream de sinais algorítmicos e log de ordens executadas.
