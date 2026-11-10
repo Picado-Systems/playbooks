@@ -25,11 +25,13 @@ O **`cripto-bot-2`** é um bot de negociação e análise técnica em **.NET 9**
 | **`t_aura_02`** | [PR #3](https://github.com/RicardoVarzim/cripto-bot-2/pull/3) | `src/AuraTrader.Domain/Indicators/MACD.cs`<br>`tests/.../MACDTests.cs` | 16/16 Passados | **Merged** |
 | **`t_aura_03`** | [PR #4](https://github.com/RicardoVarzim/cripto-bot-2/pull/4) | `src/.../Services/MomentumSignalEvaluator.cs`<br>`tests/.../MomentumSignalEvaluatorTests.cs` | 20/20 Passados | **Merged** |
 | **`t_aura_04/05`** | [PR #5](https://github.com/RicardoVarzim/cripto-bot-2/pull/5) | `MarketDataIngestionService`, `PricePollingWorker`, `PaperTradingService`, `PaperTradingWorker`, `ui/` (Angular 19) | 28/28 Passados | **Merged** |
+| **`t_aura_06`** | [PR #8](https://github.com/RicardoVarzim/cripto-bot-2/pull/8) | `BinancePublicClient.cs`, `DependencyInjection.cs`, `BinancePublicClientTests.cs` | 35/35 Passados | **Merged** |
 
-### Resumo Técnico do Lean MVP Integrado até ao PR #5:
-1. **Pipeline de Ingestão e Worker Autónomo**: Polling periódico de cotações, persistência em SQLite e emissão no `ChannelMessageBus`.
-2. **Motor de Paper Trading**: Carteira virtual de $10.000 USD, alocação de 10% por trade, dedução de taxa de 0.1%, acompanhamento de PnL realizado/não-realizado e persistência completa de ordens (`PaperOrders`).
-3. **Frontend Angular 19**: Painel reativo com Angular Signals, exibindo métricas de carteira, posições em aberto e comandos de trigger manual.
+### Resumo Técnico do Lean MVP Integrado até ao PR #8:
+1. **Provedor de Mercado Gratuito (Binance)**: Implementado `BinancePublicClient` consumindo endpoints públicos spot e klines (1d) da Binance sem necessidade de API key, com normalização de pares (`USD` -> `USDT`). Provedor padrão configurado no DI.
+2. **Pipeline de Ingestão e Worker Autónomo**: Polling periódico de cotações, persistência em SQLite e emissão no `ChannelMessageBus`.
+3. **Motor de Paper Trading**: Carteira virtual de $10.000 USD, alocação de 10% por trade, dedução de taxa de 0.1%, acompanhamento de PnL realizado/não-realizado e persistência completa de ordens (`PaperOrders`).
+4. **Frontend Angular 19**: Painel reativo com Angular Signals, exibindo métricas de carteira, posições em aberto e comandos de trigger manual.
 
 ---
 
