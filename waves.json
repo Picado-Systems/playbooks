@@ -1,0 +1,94 @@
+{
+  "waves": [
+    {
+      "id": "wave_01",
+      "scheduled_at": "2026-10-19 09:30:00",
+      "project": "cripto-bot-2",
+      "duration_hours": 1.5,
+      "goals": "PaperTradingService: simulação de ordens baseadas em TradeSignal + balance tracking",
+      "status": "scheduled",
+      "created_at": "2026-10-19T07:05:00.000000"
+    },
+    {
+      "id": "wave_02",
+      "scheduled_at": "2026-10-19 15:30:00",
+      "project": "padelsync",
+      "duration_hours": 1.5,
+      "goals": "Segurança CI: migração de credenciais de teste para GitHub Secrets (PR #7) e validação de migrações",
+      "status": "scheduled",
+      "created_at": "2026-10-19T07:05:00.000000"
+    },
+    {
+      "id": "wave_03",
+      "scheduled_at": "2026-10-20 09:30:00",
+      "project": "padelsync",
+      "duration_hours": 1.5,
+      "goals": "Non-Stop Tournaments: endpoints e schema de inscrições e formato de chaves",
+      "status": "scheduled",
+      "created_at": "2026-10-19T07:05:00.000000"
+    },
+    {
+      "id": "wave_04",
+      "scheduled_at": "2026-10-20 15:30:00",
+      "project": "cripto-bot-2",
+      "duration_hours": 1.5,
+      "goals": "Candles Crawler: histórico de preços e cliente resiliente para pares de moedas",
+      "status": "scheduled",
+      "created_at": "2026-10-19T07:05:00.000000"
+    },
+    {
+      "id": "wave_05",
+      "scheduled_at": "2026-10-21 09:30:00",
+      "project": "raiz",
+      "duration_hours": 1.5,
+      "goals": "Treasury / Caixa imediato: estrutura de transações e reconciliação diária",
+      "status": "scheduled",
+      "created_at": "2026-10-19T07:05:00.000000"
+    },
+    {
+      "id": "wave_06",
+      "scheduled_at": "2026-10-21 15:30:00",
+      "project": "raiz",
+      "duration_hours": 1.5,
+      "goals": "Integração de pagamentos e emissão de vouchers (PR #3)",
+      "status": "scheduled",
+      "created_at": "2026-10-19T07:05:00.000000"
+    },
+    {
+      "id": "wave_07",
+      "scheduled_at": "2026-10-22 09:30:00",
+      "project": "padelsync",
+      "duration_hours": 1.5,
+      "goals": "Matchmaking de comunidades e notificações Telegram de novos jogos",
+      "status": "scheduled",
+      "created_at": "2026-10-19T07:05:00.000000"
+    },
+    {
+      "id": "wave_08",
+      "scheduled_at": "2026-10-22 15:30:00",
+      "project": "portfolio-dashboard",
+      "duration_hours": 1.5,
+      "goals": "Resolução de healthcheck Nginx/Wget e consolidação de repositórios",
+      "status": "scheduled",
+      "created_at": "2026-10-19T07:05:00.000000"
+    },
+    {
+      "id": "wave_09",
+      "scheduled_at": "2026-10-23 09:30:00",
+      "project": "padelsync",
+      "duration_hours": 1.5,
+      "goals": "Backup automatizado diário de base Postgres (padelsync + raiz) para local seguro",
+      "status": "scheduled",
+      "created_at": "2026-10-19T07:05:00.000000"
+    },
+    {
+      "id": "wave_10",
+      "scheduled_at": "2026-10-23 15:30:00",
+      "project": "cripto-bot-2",
+      "duration_hours": 1.5,
+      "goals": "Auditoria final de CI, testes de integração e relatório consolidado semanal",
+      "status": "scheduled",
+      "created_at": "2026-10-19T07:05:00.000000"
+    }
+  ]
+}
